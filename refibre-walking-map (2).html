@@ -1,0 +1,492 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RE-Fibre Walking Trail Map</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --teal: #1a6b6b; --teal-light: #2a9d8f; --teal-pale: #e8f4f4;
+    --gold: #e9c46a; --rust: #e76f51; --cream: #faf8f4;
+    --charcoal: #264653; --mid: #457b9d; --text: #1d3a3a; --muted: #5a7a7a;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family:'DM Sans',sans-serif; background:var(--cream); color:var(--text); min-height:100vh; }
+
+  header {
+    background:var(--charcoal); color:white; padding:18px 28px;
+    display:flex; align-items:center; gap:16px;
+    box-shadow:0 2px 16px rgba(0,0,0,0.2);
+  }
+  .logo-badge {
+    width:48px; height:48px; background:var(--teal-light); border-radius:50%;
+    display:flex; align-items:center; justify-content:center; font-size:20px; flex-shrink:0;
+  }
+  header h1 { font-family:'Playfair Display',serif; font-size:1.35rem; font-weight:700; }
+  header p { font-size:0.78rem; color:#aac8c8; margin-top:2px; font-weight:300; }
+  .tag {
+    margin-left:auto; background:var(--teal-light); color:white;
+    border-radius:20px; padding:5px 14px; font-size:0.72rem; font-weight:500; white-space:nowrap;
+  }
+
+  .layout { display:grid; grid-template-columns:330px 1fr; height:calc(100vh - 82px); }
+
+  .sidebar { background:white; border-right:1px solid #d6e8e8; overflow-y:auto; display:flex; flex-direction:column; }
+  .sidebar-top { padding:16px 18px 12px; border-bottom:1px solid #e8f0f0; background:var(--teal-pale); }
+  .sidebar-top h2 { font-family:'Playfair Display',serif; font-size:0.95rem; color:var(--charcoal); font-weight:600; }
+  .sidebar-top p { font-size:0.73rem; color:var(--muted); margin-top:3px; }
+  .legend { display:flex; gap:12px; margin-top:10px; flex-wrap:wrap; }
+  .legend-item { display:flex; align-items:center; gap:5px; font-size:0.7rem; color:var(--muted); }
+  .legend-dot { width:11px; height:11px; border-radius:50%; flex-shrink:0; }
+  .legend-line { width:18px; height:3px; border-radius:2px; flex-shrink:0; }
+
+  .hospital-list { padding:8px 0; flex:1; }
+  .hospital-card { padding:12px 18px; border-bottom:1px solid #eef4f4; cursor:pointer; transition:all 0.15s; }
+  .hospital-card:hover { background:var(--teal-pale); }
+  .hospital-card.active { background:#d4eeee; border-left:3px solid var(--teal-light); padding-left:15px; }
+  .hcard-top { display:flex; align-items:flex-start; gap:10px; }
+  .hcard-num {
+    width:24px; height:24px; background:var(--charcoal); color:white; border-radius:50%;
+    display:flex; align-items:center; justify-content:center;
+    font-size:0.68rem; font-weight:700; flex-shrink:0; margin-top:1px;
+  }
+  .hcard-info h3 { font-size:0.83rem; font-weight:600; color:var(--charcoal); line-height:1.3; }
+  .hcard-info .city { font-size:0.71rem; color:var(--muted); margin-top:1px; }
+  .trail-pills { display:flex; flex-wrap:wrap; gap:4px; margin-top:7px; padding-left:34px; }
+  .trail-pill {
+    background:var(--teal-pale); border:1px solid #b8dede; color:var(--teal);
+    font-size:0.65rem; padding:2px 8px; border-radius:10px; font-weight:500;
+  }
+
+  .detail-panel {
+    padding:14px 18px; background:var(--teal-pale); border-top:1px solid #d6e8e8;
+    font-size:0.76rem; color:var(--muted); display:none;
+  }
+  .detail-panel.show { display:block; }
+  .detail-panel h4 { font-family:'Playfair Display',serif; color:var(--charcoal); font-size:0.88rem; margin-bottom:8px; }
+  .trail-detail { background:white; border-radius:8px; padding:9px 11px; margin-bottom:7px; border-left:3px solid var(--teal-light); }
+  .trail-detail-name { font-weight:600; color:var(--charcoal); font-size:0.78rem; }
+  .trail-meta { display:flex; gap:10px; margin-top:4px; flex-wrap:wrap; }
+  .trail-meta span { font-size:0.68rem; color:var(--muted); }
+
+  #map { width:100%; height:100%; position:relative; background:#b8d4d8; overflow:hidden; }
+  #ireland-svg { width:100%; height:100%; }
+  .map-hospital { cursor:pointer; }
+  .map-label {
+    font-family:'DM Sans',sans-serif; font-size:10px; font-weight:600; fill:var(--charcoal);
+    pointer-events:none; paint-order:stroke; stroke:white; stroke-width:3px;
+  }
+  .trail-path { fill:none; stroke-width:2; stroke-linecap:round; stroke-dasharray:5 4; opacity:0.5; transition:opacity 0.2s,stroke-width 0.2s; }
+  .trail-path.active { opacity:1; stroke-width:3.5; }
+
+  .map-info-box {
+    position:absolute; top:14px; left:14px; background:white; border-radius:12px;
+    padding:13px 16px; box-shadow:0 4px 20px rgba(0,0,0,0.12);
+    min-width:195px; max-width:250px; display:none;
+    border-top:3px solid var(--teal-light); z-index:10;
+  }
+  .map-info-box.show { display:block; }
+  .map-info-box h3 { font-family:'Playfair Display',serif; font-size:0.9rem; color:var(--charcoal); margin-bottom:3px; padding-right:18px; }
+  .map-info-box .sub { font-size:0.7rem; color:var(--muted); margin-bottom:9px; }
+  .info-trail { display:flex; align-items:center; gap:7px; padding:4px 0; border-bottom:1px solid #eef4f4; font-size:0.72rem; }
+  .info-trail:last-child { border-bottom:none; }
+  .info-dot { width:8px; height:8px; border-radius:50%; flex-shrink:0; }
+  .close-btn { position:absolute; top:10px; right:12px; background:none; border:none; cursor:pointer; color:var(--muted); font-size:0.95rem; }
+
+  .dublin-inset {
+    position:absolute; bottom:52px; right:14px; background:white; border-radius:10px;
+    box-shadow:0 3px 14px rgba(0,0,0,0.13); border:1.5px solid #e76f51; width:175px; overflow:hidden;
+  }
+  .dublin-inset-title { background:var(--charcoal); color:white; font-size:0.68rem; font-weight:600; padding:5px 10px; letter-spacing:0.04em; }
+
+  .stats-bar {
+    background:var(--charcoal); color:white; display:flex; justify-content:center; gap:36px;
+    padding:9px 20px; position:absolute; bottom:0; left:0; right:0; font-size:0.74rem;
+  }
+  .stat { text-align:center; }
+  .stat strong { display:block; font-size:1.05rem; color:var(--gold); font-family:'Playfair Display',serif; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo-badge">🦠</div>
+  <div>
+    <h1>RE-Fibre Intervention — Walking Trail Map</h1>
+    <p>Structured Walking Programme · 150 min/week · 8 Recruitment Sites · Ireland</p>
+  </div>
+  <div class="tag">🚶 Stride for Life Partnership</div>
+</header>
+
+<div class="layout">
+  <div class="sidebar">
+    <div class="sidebar-top">
+      <h2>Recruitment Hospital Sites</h2>
+      <p>Click a site to view nearby walking trails available through Strides for Life.</p>
+      <div class="legend">
+        <div class="legend-item"><div class="legend-dot" style="background:#2a9d8f"></div> Hospital</div>
+        <div class="legend-item"><div class="legend-line" style="background:#e9c46a"></div> ≤3 km</div>
+        <div class="legend-item"><div class="legend-line" style="background:#e76f51"></div> 3–6 km</div>
+        <div class="legend-item"><div class="legend-line" style="background:#457b9d"></div> &gt;6 km</div>
+      </div>
+    </div>
+    <div class="hospital-list" id="hospital-list"></div>
+    <div class="detail-panel" id="detail-panel">
+      <h4 id="detail-title">Nearby Trails</h4>
+      <div id="detail-trails"></div>
+    </div>
+  </div>
+
+  <div id="map">
+    <svg id="ireland-svg" viewBox="0 0 500 560" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <linearGradient id="seaGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" style="stop-color:#b0cdd2"/>
+          <stop offset="100%" style="stop-color:#96b8be"/>
+        </linearGradient>
+        <linearGradient id="landGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" style="stop-color:#cfe0c0"/>
+          <stop offset="100%" style="stop-color:#b5cc9a"/>
+        </linearGradient>
+        <filter id="shadow"><feDropShadow dx="1" dy="2" stdDeviation="2.5" flood-opacity="0.2"/></filter>
+      </defs>
+
+      <rect width="500" height="560" fill="url(#seaGrad)"/>
+
+      <!-- Ireland landmass — hand-fitted to the coordinate projection -->
+      <path filter="url(#shadow)" fill="url(#landGrad)" stroke="#7a9e6e" stroke-width="1.5" d="
+        M268,32 L292,30 L316,34 L337,42 L355,54
+        L370,70 L379,89 L384,110 L392,126 L402,142
+        L412,158 L418,176 L420,196 L416,214 L408,230
+        L418,244 L424,262 L426,280 L422,298 L414,314
+        L410,332 L414,350 L416,368 L410,386 L400,402
+        L386,415 L370,426 L350,434 L328,440 L306,444
+        L284,445 L262,443 L240,438 L220,429 L202,417
+        L186,402 L174,386 L165,368 L162,348 L160,328
+        L154,310 L142,296 L126,286 L110,280
+        L94,272 L80,260 L70,246 L66,230 L68,213
+        L74,196 L76,178 L70,160 L66,142 L68,124
+        L76,108 L88,94 L104,82 L120,72 L138,62
+        L158,52 L178,44 L200,37 L224,32 L248,30 Z
+      "/>
+
+      <!-- Northern Ireland (lighter shade) -->
+      <path fill="#c2d8b0" stroke="#7a9e6e" stroke-width="1" opacity="0.8" d="
+        M268,32 L292,30 L316,34 L337,42 L355,54
+        L370,70 L379,89 L382,107 L372,114 L356,110
+        L340,104 L324,102 L308,107 L296,116 L285,124
+        L276,116 L270,104 L266,88 L265,68 L266,50 Z
+      "/>
+
+      <!-- Subtle grid -->
+      <line x1="0" y1="140" x2="500" y2="140" stroke="#96b0ae" stroke-width="0.5" stroke-dasharray="3,7" opacity="0.5"/>
+      <line x1="0" y1="280" x2="500" y2="280" stroke="#96b0ae" stroke-width="0.5" stroke-dasharray="3,7" opacity="0.5"/>
+      <line x1="0" y1="420" x2="500" y2="420" stroke="#96b0ae" stroke-width="0.5" stroke-dasharray="3,7" opacity="0.5"/>
+      <line x1="125" y1="0" x2="125" y2="560" stroke="#96b0ae" stroke-width="0.5" stroke-dasharray="3,7" opacity="0.5"/>
+      <line x1="250" y1="0" x2="250" y2="560" stroke="#96b0ae" stroke-width="0.5" stroke-dasharray="3,7" opacity="0.5"/>
+      <line x1="375" y1="0" x2="375" y2="560" stroke="#96b0ae" stroke-width="0.5" stroke-dasharray="3,7" opacity="0.5"/>
+
+      <!-- City reference labels -->
+      <text x="356" y="265" font-size="9" fill="#4a6a6a" font-family="DM Sans,sans-serif" font-weight="600" opacity="0.75">Dublin</text>
+      <text x="152" y="476" font-size="9" fill="#4a6a6a" font-family="DM Sans,sans-serif" font-weight="600" opacity="0.75">Cork</text>
+      <text x="106" y="308" font-size="9" fill="#4a6a6a" font-family="DM Sans,sans-serif" font-weight="600" opacity="0.75">Galway</text>
+      <text x="148" y="390" font-size="9" fill="#4a6a6a" font-family="DM Sans,sans-serif" font-weight="600" opacity="0.75">Limerick</text>
+      <text x="260" y="435" font-size="9" fill="#4a6a6a" font-family="DM Sans,sans-serif" font-weight="600" opacity="0.75">Waterford</text>
+
+      <!-- Dublin inset callout box on main map -->
+      <rect x="355" y="248" width="72" height="62" fill="rgba(255,255,255,0.15)" stroke="#e76f51" stroke-width="1.5" stroke-dasharray="4,3" rx="4"/>
+      <text x="360" y="244" font-size="7.5" fill="#e76f51" font-family="DM Sans,sans-serif" font-weight="700">see inset ↘</text>
+
+      <!-- Trail paths layer -->
+      <g id="trail-paths"></g>
+      <!-- Hospital markers layer -->
+      <g id="hospital-markers"></g>
+
+      <!-- Compass -->
+      <g transform="translate(456,52)">
+        <circle r="22" fill="white" opacity="0.88" stroke="#ccc" stroke-width="1"/>
+        <text text-anchor="middle" y="-8" font-size="8" fill="#333" font-weight="700" font-family="DM Sans,sans-serif">N</text>
+        <text text-anchor="middle" y="15" font-size="8" fill="#333" font-family="DM Sans,sans-serif">S</text>
+        <text x="11" text-anchor="middle" y="4" font-size="8" fill="#333" font-family="DM Sans,sans-serif">E</text>
+        <text x="-11" text-anchor="middle" y="4" font-size="8" fill="#333" font-family="DM Sans,sans-serif">W</text>
+        <line x1="0" y1="-16" x2="0" y2="16" stroke="#264653" stroke-width="1.5"/>
+        <line x1="-16" y1="0" x2="16" y2="0" stroke="#264653" stroke-width="1.5"/>
+        <polygon points="0,-15 3,-5 0,-1 -3,-5" fill="#e76f51"/>
+      </g>
+
+      <!-- Scale bar -->
+      <g transform="translate(28,520)">
+        <rect width="70" height="5" fill="#264653" rx="1.5"/>
+        <rect x="70" width="70" height="5" fill="white" stroke="#264653" stroke-width="1" rx="1.5"/>
+        <text x="0" y="16" font-size="8.5" fill="#264653" font-family="DM Sans,sans-serif">0</text>
+        <text x="60" y="16" font-size="8.5" fill="#264653" font-family="DM Sans,sans-serif">50 km</text>
+        <text x="130" y="16" font-size="8.5" fill="#264653" font-family="DM Sans,sans-serif">100 km</text>
+      </g>
+    </svg>
+
+    <!-- Dublin inset -->
+    <div class="dublin-inset">
+      <div class="dublin-inset-title">📍 Dublin Hospitals (zoomed)</div>
+      <!--
+        Inset shows viewBox ~355,248 to 427,310 on the main SVG
+        Rendered at 175×120px so scale = 175/72 ≈ 2.43x
+      -->
+      <svg viewBox="350 244 80 68" width="175" height="149" xmlns="http://www.w3.org/2000/svg">
+        <rect x="350" y="244" width="80" height="68" fill="#cfe0c0"/>
+        <!-- coastline fragment (eastern coast) -->
+        <path fill="#b8cc9e" stroke="#7a9e6e" stroke-width="0.5" d="
+          M408,244 L427,250 L430,265 L428,280 L424,295 L418,308 L410,312
+          L400,310 L390,308 L385,295 L388,280 L392,265 L398,252 Z
+        "/>
+        <g id="dublin-inset-markers"></g>
+      </svg>
+    </div>
+
+    <div class="map-info-box" id="map-info-box">
+      <button class="close-btn" onclick="closeInfo()">✕</button>
+      <h3 id="info-title"></h3>
+      <div class="sub" id="info-sub"></div>
+      <div id="info-trails-list"></div>
+    </div>
+
+    <div class="stats-bar">
+      <div class="stat"><strong>8</strong>Sites</div>
+      <div class="stat"><strong>400</strong>Participants</div>
+      <div class="stat"><strong>150 min</strong>/week</div>
+      <div class="stat"><strong>12</strong>Months</div>
+      <div class="stat"><strong>≥80%</strong>Adherence Target</div>
+    </div>
+  </div>
+</div>
+
+<script>
+/*
+  All coordinates precisely derived from real lat/lng using:
+  viewBox 500×560, Ireland bounds lat 51.3–55.5 / lon -10.7 to -5.3
+  x = 40 + (lon + 10.7) / 5.4 * 420
+  y = 30 + (55.5 - lat) / 4.2 * 500
+
+  Results:
+  St James's (53.3397,-6.2951)     → x=382.6, y=287.2
+  St Vincent's (53.3170,-6.2122)   → x=389.1, y=289.9
+  Mater (53.3601,-6.2652)          → x=384.9, y=284.7
+  Beaumont (53.3904,-6.2240)       → x=388.1, y=281.1
+  Cork UH (51.8827,-8.5122)        → x=210.2, y=460.6
+  Galway UH (53.2768,-9.0661)      → x=167.1, y=294.7
+  UH Limerick (52.6353,-8.6539)    → x=199.1, y=371.0
+  UH Waterford (52.2485,-7.0785)   → x=321.7, y=417.1
+*/
+const hospitals = [
+  { id:1, name:"St James's University Hospital",    city:"Dublin 8",   x:382.6, y:287.2,
+    trails:[
+      {name:"Phoenix Park Loop",            dist:"5.2 km", time:"55 min", level:"Moderate",    color:"#e76f51"},
+      {name:"Grand Canal Towpath",           dist:"3.0 km", time:"32 min", level:"Easy",        color:"#e76f51"},
+      {name:"War Memorial Gardens",          dist:"2.0 km", time:"22 min", level:"Easy",        color:"#e9c46a"}
+    ]
+  },
+  { id:2, name:"St Vincent's University Hospital",  city:"Dublin 4",   x:389.1, y:289.9,
+    trails:[
+      {name:"Sandymount Strand Walk",        dist:"4.0 km", time:"42 min", level:"Easy",        color:"#e76f51"},
+      {name:"Booterstown Marsh Trail",       dist:"2.5 km", time:"28 min", level:"Easy",        color:"#e9c46a"},
+      {name:"Herbert Park Loop",             dist:"1.8 km", time:"20 min", level:"Easy",        color:"#e9c46a"}
+    ]
+  },
+  { id:3, name:"The Mater University Hospital",     city:"Dublin 7",   x:384.9, y:284.7,
+    trails:[
+      {name:"Royal Canal Greenway",          dist:"6.5 km", time:"65 min", level:"Moderate",    color:"#457b9d"},
+      {name:"Blessington St Basin",          dist:"1.5 km", time:"18 min", level:"Easy",        color:"#e9c46a"},
+      {name:"Glasnevin Cemetery Grounds",    dist:"2.8 km", time:"30 min", level:"Easy",        color:"#e9c46a"}
+    ]
+  },
+  { id:4, name:"Beaumont Hospital",                 city:"Dublin 9",   x:388.1, y:281.1,
+    trails:[
+      {name:"Santry Demesne Park",           dist:"3.5 km", time:"38 min", level:"Easy",        color:"#e76f51"},
+      {name:"Griffith Park Loop",            dist:"2.5 km", time:"28 min", level:"Easy",        color:"#e9c46a"},
+      {name:"Tolka Valley Greenway",         dist:"7.0 km", time:"72 min", level:"Moderate",    color:"#457b9d"}
+    ]
+  },
+  { id:5, name:"Cork University Hospital",          city:"Cork",       x:210.2, y:460.6,
+    trails:[
+      {name:"Fitzgerald Park River Walk",    dist:"3.0 km", time:"32 min", level:"Easy",        color:"#e76f51"},
+      {name:"The Lough Walk",                dist:"1.8 km", time:"20 min", level:"Easy",        color:"#e9c46a"},
+      {name:"Ballincollig Gunpowder Mills",  dist:"5.5 km", time:"58 min", level:"Moderate",    color:"#e76f51"}
+    ]
+  },
+  { id:6, name:"University Hospital Galway",        city:"Galway",     x:167.1, y:294.7,
+    trails:[
+      {name:"Salthill Promenade",            dist:"3.8 km", time:"40 min", level:"Easy",        color:"#e76f51"},
+      {name:"Terryland Forest Park",         dist:"2.5 km", time:"28 min", level:"Easy",        color:"#e9c46a"},
+      {name:"Coole Park Nature Trail",       dist:"6.0 km", time:"62 min", level:"Moderate",    color:"#457b9d"}
+    ]
+  },
+  { id:7, name:"University Hospital Limerick",      city:"Limerick",   x:199.1, y:371.0,
+    trails:[
+      {name:"Plassey National Park Trail",   dist:"4.5 km", time:"47 min", level:"Easy",        color:"#e76f51"},
+      {name:"Shannon Fields Riverside",      dist:"3.2 km", time:"34 min", level:"Easy",        color:"#e76f51"},
+      {name:"Cratloe Woods Trail",           dist:"7.5 km", time:"78 min", level:"Challenging", color:"#457b9d"}
+    ]
+  },
+  { id:8, name:"University Hospital Waterford",     city:"Waterford",  x:321.7, y:417.1,
+    trails:[
+      {name:"Waterford Greenway",            dist:"9.0 km", time:"90 min", level:"Easy",        color:"#457b9d"},
+      {name:"Peoples Park Loop",             dist:"2.0 km", time:"22 min", level:"Easy",        color:"#e9c46a"},
+      {name:"Mount Congreve Gardens Trail",  dist:"4.0 km", time:"42 min", level:"Easy",        color:"#e76f51"}
+    ]
+  }
+];
+
+// Trail radiating offsets [dx,dy] for each of 3 trails per hospital
+const trailOffsets = [
+  [[-35,-12],[-28,18],[-15,-28]],  // St James's  (west of Dublin, trails head W/SW)
+  [[22,16],[30,4],[14,28]],          // St Vincent's (south Dublin, trails head SE coast)
+  [[-22,-20],[-36,-6],[-10,-32]],   // Mater (north Dublin city)
+  [[18,-20],[30,-6],[8,-30]],        // Beaumont (north Dublin suburb)
+  [[-28,-18],[-14,-30],[18,-16]],    // Cork
+  [[-30,10],[-40,-6],[-18,26]],      // Galway (west coast)
+  [[-26,20],[-36,4],[14,22]],        // Limerick
+  [[26,14],[12,28],[36,4]]           // Waterford
+];
+
+let activeId = null;
+
+function renderSidebar() {
+  document.getElementById('hospital-list').innerHTML = hospitals.map(h => `
+    <div class="hospital-card" id="card-${h.id}" onclick="selectHospital(${h.id})">
+      <div class="hcard-top">
+        <div class="hcard-num">${h.id}</div>
+        <div class="hcard-info">
+          <h3>${h.name}</h3>
+          <div class="city">📍 ${h.city} &nbsp;·&nbsp; ${h.trails.length} nearby trails</div>
+        </div>
+      </div>
+      <div class="trail-pills">
+        ${h.trails.map(t=>`<span class="trail-pill">${t.name.split(' ').slice(0,2).join(' ')} · ${t.dist}</span>`).join('')}
+      </div>
+    </div>
+  `).join('');
+}
+
+function renderMarkers() {
+  const ns = 'http://www.w3.org/2000/svg';
+  const trailsG  = document.getElementById('trail-paths');
+  const markersG = document.getElementById('hospital-markers');
+  const insetG   = document.getElementById('dublin-inset-markers');
+
+  hospitals.forEach((h, idx) => {
+    // Trail lines
+    trailOffsets[idx].forEach((off, ti) => {
+      const line = document.createElementNS(ns,'line');
+      line.setAttribute('x1', h.x); line.setAttribute('y1', h.y);
+      line.setAttribute('x2', h.x + off[0]); line.setAttribute('y2', h.y + off[1]);
+      line.setAttribute('class','trail-path');
+      line.setAttribute('stroke', h.trails[ti].color);
+      line.setAttribute('id', `trail-${h.id}-${ti}`);
+      trailsG.appendChild(line);
+    });
+
+    // Main marker
+    const g = document.createElementNS(ns,'g');
+    g.setAttribute('class','map-hospital');
+    g.setAttribute('id',`marker-${h.id}`);
+    g.setAttribute('transform',`translate(${h.x},${h.y})`);
+    g.setAttribute('onclick',`selectHospital(${h.id})`);
+
+    const ring = document.createElementNS(ns,'circle');
+    ring.setAttribute('r','14'); ring.setAttribute('fill','white'); ring.setAttribute('opacity','0.85');
+    ring.setAttribute('stroke','#2a9d8f'); ring.setAttribute('stroke-width','2');
+
+    const circ = document.createElementNS(ns,'circle');
+    circ.setAttribute('r','9'); circ.setAttribute('fill','#1a6b6b');
+
+    const num = document.createElementNS(ns,'text');
+    num.setAttribute('text-anchor','middle'); num.setAttribute('dy','3.5');
+    num.setAttribute('font-size','9'); num.setAttribute('font-weight','700');
+    num.setAttribute('fill','white'); num.setAttribute('font-family','DM Sans,sans-serif');
+    num.textContent = h.id;
+
+    g.appendChild(ring); g.appendChild(circ); g.appendChild(num);
+    markersG.appendChild(g);
+
+    // Dublin inset (hospitals 1–4 only)
+    if (h.id <= 4) {
+      const ig = document.createElementNS(ns,'g');
+      ig.setAttribute('transform',`translate(${h.x},${h.y})`);
+      ig.setAttribute('onclick',`selectHospital(${h.id})`);
+      ig.setAttribute('style','cursor:pointer');
+
+      const ic = document.createElementNS(ns,'circle');
+      ic.setAttribute('r','4.5'); ic.setAttribute('fill','#1a6b6b');
+      ic.setAttribute('stroke','white'); ic.setAttribute('stroke-width','1.2');
+
+      const iNum = document.createElementNS(ns,'text');
+      iNum.setAttribute('text-anchor','middle'); iNum.setAttribute('dy','2');
+      iNum.setAttribute('font-size','4.5'); iNum.setAttribute('fill','white');
+      iNum.setAttribute('font-weight','700'); iNum.setAttribute('font-family','DM Sans,sans-serif');
+      iNum.textContent = h.id;
+
+      // Label positions adjusted for each Dublin hospital
+      const lpos = [[7,-7],[8,6],[-7,-7],[-7,6]];
+      const lo = lpos[h.id-1];
+      const names = ["St James's","St Vincent's","Mater","Beaumont"];
+      const lbl = document.createElementNS(ns,'text');
+      lbl.setAttribute('x',lo[0]); lbl.setAttribute('y',lo[1]);
+      lbl.setAttribute('font-size','4'); lbl.setAttribute('fill','#264653');
+      lbl.setAttribute('font-family','DM Sans,sans-serif'); lbl.setAttribute('font-weight','600');
+      lbl.setAttribute('paint-order','stroke'); lbl.setAttribute('stroke','white'); lbl.setAttribute('stroke-width','2.5');
+      lbl.textContent = names[h.id-1];
+
+      ig.appendChild(ic); ig.appendChild(iNum); ig.appendChild(lbl);
+      insetG.appendChild(ig);
+    }
+  });
+}
+
+function selectHospital(id) {
+  if (activeId !== null) {
+    document.getElementById(`card-${activeId}`)?.classList.remove('active');
+    const prev = hospitals.find(h=>h.id===activeId);
+    document.getElementById(`marker-${activeId}`)?.setAttribute('transform',`translate(${prev.x},${prev.y})`);
+    for(let i=0;i<3;i++) document.getElementById(`trail-${activeId}-${i}`)?.classList.remove('active');
+  }
+  const h = hospitals.find(h=>h.id===id);
+  activeId = id;
+
+  document.getElementById(`card-${id}`)?.classList.add('active');
+  document.getElementById(`card-${id}`)?.scrollIntoView({behavior:'smooth',block:'nearest'});
+  document.getElementById(`marker-${id}`)?.setAttribute('transform',`translate(${h.x},${h.y}) scale(1.3)`);
+  for(let i=0;i<3;i++) document.getElementById(`trail-${id}-${i}`)?.classList.add('active');
+
+  document.getElementById('detail-panel').classList.add('show');
+  document.getElementById('detail-title').textContent = `${h.name} – Trails`;
+  document.getElementById('detail-trails').innerHTML = h.trails.map(t=>`
+    <div class="trail-detail">
+      <div class="trail-detail-name">🥾 ${t.name}</div>
+      <div class="trail-meta">
+        <span>📏 ${t.dist}</span><span>⏱ ${t.time}</span><span>💪 ${t.level}</span>
+      </div>
+    </div>
+  `).join('');
+
+  const box = document.getElementById('map-info-box');
+  box.classList.add('show');
+  document.getElementById('info-title').textContent = h.name;
+  document.getElementById('info-sub').textContent = `📍 ${h.city} · ${h.trails.length} trails`;
+  document.getElementById('info-trails-list').innerHTML = h.trails.map(t=>`
+    <div class="info-trail">
+      <div class="info-dot" style="background:${t.color}"></div>
+      <div>
+        <strong style="font-size:0.72rem;color:#264653">${t.name}</strong>
+        <div style="font-size:0.65rem;color:#5a7a7a">${t.dist} · ${t.time} · ${t.level}</div>
+      </div>
+    </div>
+  `).join('');
+}
+
+function closeInfo() { document.getElementById('map-info-box').classList.remove('show'); }
+
+renderSidebar();
+renderMarkers();
+</script>
+</body>
+</html>
